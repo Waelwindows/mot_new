@@ -6,6 +6,8 @@ use std::collections::{BTreeMap, VecDeque};
 
 mod ordering;
 mod read;
+#[cfg(feature="pyo3")]
+pub mod python_ffi;
 
 pub struct RawMotion {
     sets: Vec<FrameData>,
