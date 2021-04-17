@@ -141,11 +141,27 @@ impl Keyframe<Hermite> {
 mod tests {
     use super::*;
 
+    use nom::*;
+
     const INPUT: &[u8] = include_bytes!("../assets/mot_PV001.bin");
+    const MOT_DB: &[u8] = include_bytes!("../../diva_db/assets/aft_mot_db.bin");
+    const BONE_DB: &[u8] = include_bytes!("../../diva_db/assets/aft_bone_data.bin");
 
     #[test]
     fn test_raw_motion() {
-        let mot = RawMotion::parse(INPUT).unwrap();
+        let (_, mot) = RawMotion::parse(INPUT).unwrap();
+        assert_eq!(mot.sets.len(), 583);
+        assert_eq!(mot.bones.len(), 193);
+    }
+
+    #[test]
+    fn qualify_motion() {
+        let (_, mot) = RawMotion::parse(INPUT).unwrap();
+        let (_, motdb) = diva_db::mot::MotionSetDatabase::read(nom::number::Endianness::Little)(MOT_DB).unwrap();
+        let (_, bonedb) = diva_db::bone::BoneDatabase::read(BONE_DB).unwrap();
+        let qual = Motion::from_raw(mot, &motdb, &bonedb).unwrap();
+
+        assert_eq!(qual.anims.len(), 192);
     }
 
     #[test]
