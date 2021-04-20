@@ -143,8 +143,8 @@ impl<'a> Motion<'a> {
                     rotation: vec3()?,
                 },
                 BoneType::Type6 => BoneAnim::LegIk {
-                    position: vec3()?,
                     target: vec3()?,
+                    position: vec3()?,
                 },
             };
             anims.insert(Bone(bone), Some(anim));
