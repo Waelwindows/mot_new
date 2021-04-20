@@ -123,6 +123,7 @@ where
         let mut i = i0;
         loop {
             let (i1, r) = f(i)?;
+            i = i1;
             if r == c {
                 if occurance < nth {
                     occurance += 1;
@@ -130,9 +131,8 @@ where
                     break;
                 }
             }
-            i = i1;
             res.push(r);
         }
-        Ok((i0, res))
+        Ok((i, res))
     }
 }
