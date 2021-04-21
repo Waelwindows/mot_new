@@ -21,3 +21,6 @@ phf = { version="0.8.0", features=["macros"] }
 tracing = { version = "0.1.25", optional = true }
 pyo3 = { version = "0.13.2", optional = true }
 nom = "5.1.2"
+
+[dev-dependencies]
+anyhow = "1.0.40"
