@@ -69,7 +69,7 @@ impl RawMotion {
         Ok(vec)
     }
     fn parse(i0: &[u8], offsets: HeaderOffsets) -> PResult<Self, RawMotionError> {
-        let (_, info) = read_at(offsets.info, le_u32)(i0)?;
+        let (_, ( info, frames )) = read_at(offsets.info, pair(le_u16, le_u16))(i0)?;
         let cnt = info as usize & 0x3FFF;
 
         dbg!(cnt);
@@ -92,7 +92,7 @@ impl RawMotion {
 
         let (i, bones) = read_at(offsets.bones, many_till_nth(le_u16, 0, 1))(i0)?;
 
-        Ok((i, Self { sets, bones }))
+        Ok((i, Self { sets, bones, frames }))
     }
 }
 
@@ -188,6 +188,7 @@ mod tests {
         assert_eq!(i, &[]);
         assert_eq!(mot.sets.len(), 583);
         assert_eq!(mot.bones.len(), 193);
+        assert_eq!(mot.frames, 9301);
         Ok(())
     }
 

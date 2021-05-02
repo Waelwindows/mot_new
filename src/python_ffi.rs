@@ -51,11 +51,15 @@ pub struct PyRawMotion {
     pub sets: Vec<PyKeySet>,
     #[pyo3(get, set)]
     pub bones: Vec<u16>,
+    #[pyo3(get)]
+    pub frames: u16,
 }
 
 #[pyclass]
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct PyMotion {
+    #[pyo3(get)]
+    pub frames: u16,
     #[pyo3(get, set)]
     anims: BTreeMap<String, Option<PyBoneAnim>>,
 }
@@ -103,7 +107,8 @@ impl From<RawMotion> for PyRawMotion {
             .map(PyKeyframe::from_frame_data)
             .collect();
         let bones = mot.bones;
-        Self { sets, bones }
+        let frames = mot.frames;
+        Self { sets, bones, frames }
     }
 }
 
@@ -114,7 +119,7 @@ impl<'a> From<Motion<'a>> for PyMotion {
             .into_iter()
             .map(|(b, a)| (b.name[..].to_string(), a.map(|x| x.into())))
             .collect();
-        Self { anims }
+        Self { anims, frames: mot.frames }
     }
 }
 
@@ -202,7 +207,8 @@ impl From<Keyframe<Hermite>> for PyKeyframe {
 impl<'p> PyObjectProtocol<'p> for PyRawMotion {
     fn __repr__(&'p self) -> PyResult<String> {
         Ok(format!(
-            "PyRawMotion: {} sets, {} bones",
+            "PyRawMotion: {} frames, {} sets, {} bones",
+            self.frames,
             self.sets.len(),
             self.bones.len(),
         ))
@@ -211,10 +217,7 @@ impl<'p> PyObjectProtocol<'p> for PyRawMotion {
 #[pyproto]
 impl<'p> PyObjectProtocol<'p> for PyMotion {
     fn __repr__(&'p self) -> PyResult<String> {
-        Ok(format!(
-            "PyMotion: {} bone animations",
-            self.anims.len(),
-        ))
+        Ok(format!("PyMotion: {} frames, {} bone animations", self.frames, self.anims.len(),))
     }
 }
 #[pyproto]
@@ -223,24 +226,21 @@ impl<'p> PyObjectProtocol<'p> for PyBoneAnim {
         let mut cap = vec![];
         match self.position {
             Some(_) => cap.push("position"),
-            _ => {},
+            _ => {}
         };
         match self.rotation {
             Some(_) => cap.push("rotation "),
-            _ => {},
+            _ => {}
         };
         match self.target {
             Some(_) => cap.push("target"),
-            _ => {},
+            _ => {}
         };
         let mut s = cap.join(", ");
         if s == "" {
             s += "empty";
         }
-        Ok(format!(
-            "PyBoneAnim: {}",
-            s
-        ))
+        Ok(format!("PyBoneAnim: {}", s))
     }
 }
 #[pyproto]
@@ -260,10 +260,7 @@ impl<'p> PyObjectProtocol<'p> for PyVec3 {
         if s == "" {
             s += "empty";
         }
-        Ok(format!(
-            "PyVec3: {}",
-            s
-        ))
+        Ok(format!("PyVec3: {}", s))
     }
 }
 #[pyproto]

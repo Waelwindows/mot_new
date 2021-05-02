@@ -12,9 +12,11 @@ pub mod python_ffi;
 pub struct RawMotion {
     sets: Vec<FrameData>,
     bones: Vec<u16>,
+    frames: u16,
 }
 
 pub struct Motion<'a> {
+    frames: u16,
     anims: BTreeMap<Bone<'a>, Option<BoneAnim>>,
 }
 
@@ -150,7 +152,7 @@ impl<'a> Motion<'a> {
             anims.insert(Bone(bone), Some(anim));
         }
         dbg!(sets.len());
-        Ok(Self { anims })
+        Ok(Self { anims, frames: mot.frames })
     }
 }
 
