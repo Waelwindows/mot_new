@@ -5,30 +5,35 @@ use pyo3::PyObjectProtocol;
 use super::*;
 
 #[pyfunction]
-fn read_raw_mot(path: String) -> PyResult<PyRawMotion> {
+fn read_raw_mot(path: String) -> PyResult<Vec<PyRawMotion>> {
     use std::fs::File;
     use std::io::Read;
 
     let input = std::fs::read(path)?;
-    let (_, raw) = RawMotion::parse(&input).unwrap();
-    Ok(raw.into())
+    let raw = RawMotion::read(&input).unwrap();
+    Ok(raw.into_iter().map(Into::into).collect())
 }
 
 #[pyfunction]
-fn read_mot(path: String, mot_db: String, bone_db: String) -> PyResult<PyMotion> {
+fn read_mot(path: String, mot_db: String, bone_db: String) -> PyResult<Vec<PyMotion>> {
     use std::io::Read;
 
     let input = std::fs::read(path)?;
-    let (_, raw) = RawMotion::parse(&input).unwrap();
+    let raws = RawMotion::read(&input).unwrap();
 
     let input = std::fs::read(mot_db)?;
-    let (_, mot_db) = diva_db::mot::MotionSetDatabase::read(nom::number::Endianness::Little)(&input).unwrap();
+    let (_, mot_db) =
+        diva_db::mot::MotionSetDatabase::read(&input).unwrap();
     let input = std::fs::read(bone_db)?;
     let (_, bone_db) = diva_db::bone::BoneDatabase::read(&input).unwrap();
 
-    let mot = Motion::from_raw(raw, &mot_db, &bone_db).unwrap();
+    let mots = raws
+        .into_iter()
+        .map(|x| Motion::from_raw(x, &mot_db, &bone_db).map(PyMotion::from))
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
 
-    Ok(mot.into())
+    Ok(mots)
 }
 
 #[pymodule]
