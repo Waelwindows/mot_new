@@ -2,10 +2,12 @@ use pyo3::prelude::*;
 use pyo3::wrap_pyfunction;
 use pyo3::PyObjectProtocol;
 
-use super::*;
+use std::collections::BTreeMap;
 
 #[pyfunction]
-fn read_raw_mot(path: String) -> PyResult<Vec<PyRawMotion>> {
+fn read_raw_mot(path: String) -> PyResult<Vec<RawMotion>> {
+    use super::*;
+
     use std::fs::File;
     use std::io::Read;
 
@@ -15,21 +17,21 @@ fn read_raw_mot(path: String) -> PyResult<Vec<PyRawMotion>> {
 }
 
 #[pyfunction]
-fn read_mot(path: String, mot_db: String, bone_db: String) -> PyResult<Vec<PyMotion>> {
+fn read_mot(path: String, mot_db: String, bone_db: String) -> PyResult<Vec<Motion>> {
+    use super::*;
     use std::io::Read;
 
     let input = std::fs::read(path)?;
     let raws = RawMotion::read(&input).unwrap();
 
     let input = std::fs::read(mot_db)?;
-    let (_, mot_db) =
-        diva_db::mot::MotionSetDatabase::read(&input).unwrap();
+    let (_, mot_db) = diva_db::mot::MotionSetDatabase::read(&input).unwrap();
     let input = std::fs::read(bone_db)?;
     let (_, bone_db) = diva_db::bone::BoneDatabase::read(&input).unwrap();
 
     let mots = raws
         .into_iter()
-        .map(|x| Motion::from_raw(x, &mot_db, &bone_db).map(PyMotion::from))
+        .map(|x| super::Motion::from_raw(x, &mot_db, &bone_db).map(From::from))
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
 
@@ -40,20 +42,20 @@ fn read_mot(path: String, mot_db: String, bone_db: String) -> PyResult<Vec<PyMot
 fn mot(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_wrapped(wrap_pyfunction!(read_raw_mot))?;
     m.add_wrapped(wrap_pyfunction!(read_mot))?;
-    m.add_class::<PyRawMotion>()?;
-    m.add_class::<PyMotion>()?;
-    m.add_class::<PyBoneAnim>()?;
-    m.add_class::<PyVec3>()?;
-    m.add_class::<PyKeyframe>()?;
+    m.add_class::<RawMotion>()?;
+    m.add_class::<Motion>()?;
+    m.add_class::<BoneAnim>()?;
+    m.add_class::<Vec3>()?;
+    m.add_class::<Keyframe>()?;
 
     Ok(())
 }
 
 #[pyclass]
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct PyRawMotion {
+pub struct RawMotion {
     #[pyo3(get, set)]
-    pub sets: Vec<PyKeySet>,
+    pub sets: Vec<KeySet>,
     #[pyo3(get, set)]
     pub bones: Vec<u16>,
     #[pyo3(get)]
@@ -62,40 +64,40 @@ pub struct PyRawMotion {
 
 #[pyclass]
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct PyMotion {
+pub struct Motion {
     #[pyo3(get)]
     pub frames: u16,
     #[pyo3(get, set)]
-    anims: BTreeMap<String, Option<PyBoneAnim>>,
+    anims: BTreeMap<String, Option<BoneAnim>>,
 }
 
-pub type PyKeySet = Vec<PyKeyframe>;
+pub type KeySet = Vec<Keyframe>;
 
 #[pyclass]
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct PyBoneAnim {
+pub struct BoneAnim {
     #[pyo3(get, set)]
-    position: Option<PyVec3>,
+    position: Option<Vec3>,
     #[pyo3(get, set)]
-    rotation: Option<PyVec3>,
+    rotation: Option<Vec3>,
     #[pyo3(get, set)]
-    target: Option<PyVec3>,
+    target: Option<Vec3>,
 }
 
 #[pyclass]
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct PyVec3 {
+pub struct Vec3 {
     #[pyo3(get, set)]
-    x: PyKeySet,
+    x: KeySet,
     #[pyo3(get, set)]
-    y: PyKeySet,
+    y: KeySet,
     #[pyo3(get, set)]
-    z: PyKeySet,
+    z: KeySet,
 }
 
 #[pyclass]
 #[derive(Debug, Default, PartialEq, Clone, Copy)]
-pub struct PyKeyframe {
+pub struct Keyframe {
     #[pyo3(get, set)]
     pub frame: Option<u16>,
     #[pyo3(get, set)]
@@ -104,32 +106,40 @@ pub struct PyKeyframe {
     pub interpolation: Option<f32>,
 }
 
-impl From<RawMotion> for PyRawMotion {
-    fn from(mot: RawMotion) -> Self {
+impl From<super::RawMotion> for self::RawMotion {
+    fn from(mot: super::RawMotion) -> Self {
         let sets = mot
             .sets
             .into_iter()
-            .map(PyKeyframe::from_frame_data)
+            .map(Keyframe::from_frame_data)
             .collect();
         let bones = mot.bones;
         let frames = mot.frames;
-        Self { sets, bones, frames }
+        Self {
+            sets,
+            bones,
+            frames,
+        }
     }
 }
 
-impl<'a> From<Motion<'a>> for PyMotion {
-    fn from(mot: Motion) -> Self {
+impl<'a> From<super::Motion<'a>> for self::Motion {
+    fn from(mot: super::Motion) -> Self {
         let anims = mot
             .anims
             .into_iter()
             .map(|(b, a)| (b.name[..].to_string(), a.map(|x| x.into())))
             .collect();
-        Self { anims, frames: mot.frames }
+        Self {
+            anims,
+            frames: mot.frames,
+        }
     }
 }
 
-impl From<BoneAnim> for PyBoneAnim {
-    fn from(anim: BoneAnim) -> Self {
+impl From<super::BoneAnim> for self::BoneAnim {
+    fn from(anim: super::BoneAnim) -> Self {
+        use super::*;
         match anim {
             BoneAnim::Rotation(r) => Self {
                 rotation: Some(r.into()),
@@ -164,18 +174,19 @@ impl From<BoneAnim> for PyBoneAnim {
     }
 }
 
-impl From<Vec3> for PyVec3 {
-    fn from((x, y, z): Vec3) -> Self {
+impl From<super::Vec3> for self::Vec3 {
+    fn from((x, y, z): super::Vec3) -> Self {
         Self {
-            x: PyKeyframe::from_frame_data(x),
-            y: PyKeyframe::from_frame_data(y),
-            z: PyKeyframe::from_frame_data(z),
+            x: Keyframe::from_frame_data(x),
+            y: Keyframe::from_frame_data(y),
+            z: Keyframe::from_frame_data(z),
         }
     }
 }
 
-impl PyKeyframe {
-    fn from_frame_data(data: FrameData) -> PyKeySet {
+impl Keyframe {
+    fn from_frame_data(data: super::FrameData) -> KeySet {
+        use super::*;
         match data {
             FrameData::None => vec![],
             FrameData::Pose(value) => vec![Self {
@@ -188,8 +199,8 @@ impl PyKeyframe {
     }
 }
 
-impl From<Keyframe> for PyKeyframe {
-    fn from(key: Keyframe) -> Self {
+impl From<super::Keyframe> for self::Keyframe {
+    fn from(key: super::Keyframe) -> Self {
         Self {
             frame: Some(key.frame),
             value: key.value,
@@ -198,8 +209,8 @@ impl From<Keyframe> for PyKeyframe {
     }
 }
 
-impl From<Keyframe<Hermite>> for PyKeyframe {
-    fn from(key: Keyframe<Hermite>) -> Self {
+impl From<super::Keyframe<super::Hermite>> for self::Keyframe {
+    fn from(key: super::Keyframe<super::Hermite>) -> Self {
         Self {
             frame: Some(key.frame),
             value: key.value,
@@ -209,10 +220,10 @@ impl From<Keyframe<Hermite>> for PyKeyframe {
 }
 
 #[pyproto]
-impl<'p> PyObjectProtocol<'p> for PyRawMotion {
+impl<'p> PyObjectProtocol<'p> for RawMotion {
     fn __repr__(&'p self) -> PyResult<String> {
         Ok(format!(
-            "PyRawMotion: {} frames, {} sets, {} bones",
+            "RawMotion: {} frames, {} sets, {} bones",
             self.frames,
             self.sets.len(),
             self.bones.len(),
@@ -220,13 +231,17 @@ impl<'p> PyObjectProtocol<'p> for PyRawMotion {
     }
 }
 #[pyproto]
-impl<'p> PyObjectProtocol<'p> for PyMotion {
+impl<'p> PyObjectProtocol<'p> for Motion {
     fn __repr__(&'p self) -> PyResult<String> {
-        Ok(format!("PyMotion: {} frames, {} bone animations", self.frames, self.anims.len(),))
+        Ok(format!(
+            "Motion: {} frames, {} bone animations",
+            self.frames,
+            self.anims.len(),
+        ))
     }
 }
 #[pyproto]
-impl<'p> PyObjectProtocol<'p> for PyBoneAnim {
+impl<'p> PyObjectProtocol<'p> for BoneAnim {
     fn __repr__(&'p self) -> PyResult<String> {
         let mut cap = vec![];
         match self.position {
@@ -245,11 +260,11 @@ impl<'p> PyObjectProtocol<'p> for PyBoneAnim {
         if s == "" {
             s += "empty";
         }
-        Ok(format!("PyBoneAnim: {}", s))
+        Ok(format!("BoneAnim: {}", s))
     }
 }
 #[pyproto]
-impl<'p> PyObjectProtocol<'p> for PyVec3 {
+impl<'p> PyObjectProtocol<'p> for Vec3 {
     fn __repr__(&'p self) -> PyResult<String> {
         let mut cap = vec![];
         if self.x.len() != 0 {
@@ -265,11 +280,11 @@ impl<'p> PyObjectProtocol<'p> for PyVec3 {
         if s == "" {
             s += "empty";
         }
-        Ok(format!("PyVec3: {}", s))
+        Ok(format!("Vec3: {}", s))
     }
 }
 #[pyproto]
-impl<'p> PyObjectProtocol<'p> for PyKeyframe {
+impl<'p> PyObjectProtocol<'p> for Keyframe {
     fn __repr__(&'p self) -> PyResult<String> {
         let frame = match self.frame {
             Some(p) => format!("frame: {}, ", p),
@@ -280,7 +295,7 @@ impl<'p> PyObjectProtocol<'p> for PyKeyframe {
             _ => "".into(),
         };
         Ok(format!(
-            "PyKeyframe({}value: {}{})",
+            "Keyframe({}value: {}{})",
             frame, self.value, interp
         ))
     }
