@@ -17,9 +17,13 @@ pub enum RawMotionError {
     #[error(transparent)]
     OobPointer(#[from] OobPointer),
     #[error("Unexpected EOF. Not enough bytes to read set types")]
-    SetTypeReadError(#[from] #[source] ReadAtError<Infallible>),
+    SetTypeReadError(
+        #[from]
+        #[source]
+        ReadAtError<Infallible>,
+    ),
     #[error("Failed to read the {0}th frame data at {1}")]
-    FrameReadError(usize, usize, #[source] OutOfRange)
+    FrameReadError(usize, usize, #[source] OutOfRange),
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -35,7 +39,7 @@ struct HeaderOffsets {
     info: usize,
     set_types: usize,
     sets: usize,
-    bones: usize
+    bones: usize,
 }
 
 impl HeaderOffsets {
@@ -47,14 +51,22 @@ impl HeaderOffsets {
         let (i, sets) = le_u32(i)?;
         let (i, bones) = le_u32(i)?;
         if info == 0 && set_types == 0 && sets == 0 && bones == 0 {
-            return Ok((i, None))
+            return Ok((i, None));
         }
         //panic if the values don't fit within a pointer
         let info = info.try_into().unwrap();
         let set_types = set_types.try_into().unwrap();
         let sets = sets.try_into().unwrap();
         let bones = bones.try_into().unwrap();
-        Ok((i, Some( Self { info, set_types, sets, bones } )))
+        Ok((
+            i,
+            Some(Self {
+                info,
+                set_types,
+                sets,
+                bones,
+            }),
+        ))
     }
 }
 
@@ -69,7 +81,7 @@ impl RawMotion {
         Ok(vec)
     }
     fn parse(i0: &[u8], offsets: HeaderOffsets) -> PResult<Self, RawMotionError> {
-        let (_, ( info, frames )) = read_at(offsets.info, pair(le_u16, le_u16))(i0)?;
+        let (_, (info, frames)) = read_at(offsets.info, pair(le_u16, le_u16))(i0)?;
         let cnt = info as usize & 0x3FFF;
 
         dbg!(cnt);
@@ -77,22 +89,30 @@ impl RawMotion {
         //Must divide by 4 as `SetType::parse` reads 4 types at a time
         let cnt1 = (cnt as f32 / 4.).ceil() as usize;
 
-        let (_, set_ty) = read_at(
-            offsets.set_types,
-            count(cnt1, SetType::parse_helper),
-        )(i0)?;
+        let (_, set_ty) = read_at(offsets.set_types, count(cnt1, SetType::parse_helper))(i0)?;
 
         let mut sets = Vec::with_capacity(cnt);
-        let mut i = i0.get(offsets.sets..).ok_or_else(|| OobPointer { at: offsets.sets, len: i0.len()  })?;
+        let mut i = i0.get(offsets.sets..).ok_or_else(|| OobPointer {
+            at: offsets.sets,
+            len: i0.len(),
+        })?;
         for (j, ty) in set_ty.iter().flatten().enumerate().take(cnt) {
-            let (i1, v) = FrameData::parse(*ty)(i).map_err(|e| RawMotionError::FrameReadError(j, i0.len() - i.len(), e))?;
+            let (i1, v) = FrameData::parse(*ty)(i)
+                .map_err(|e| RawMotionError::FrameReadError(j, i0.len() - i.len(), e))?;
             i = i1;
             sets.push(v);
         }
 
         let (i, bones) = read_at(offsets.bones, many_till_nth(le_u16, 0, 1))(i0)?;
 
-        Ok((i, Self { sets, bones, frames }))
+        Ok((
+            i,
+            Self {
+                sets,
+                bones,
+                frames,
+            },
+        ))
     }
 }
 
@@ -128,13 +148,11 @@ impl SetType {
 
 impl FrameData {
     pub fn parse(ty: SetType) -> impl Fn(&[u8]) -> PResult<Self, OutOfRange> {
-        move |i: &[u8]| {
-            match ty {
-                SetType::None => Ok((i, Self::None)),
-                SetType::Pose => map(le_f32, Self::Pose)(i),
-                SetType::CatmullRom => map(Keyframe::<()>::parse, Self::CatmulRom)(i),
-                SetType::Hermite => map(Keyframe::<f32>::parse, Self::Hermite)(i),
-            }
+        move |i: &[u8]| match ty {
+            SetType::None => Ok((i, Self::None)),
+            SetType::Pose => map(le_f32, Self::Pose)(i),
+            SetType::CatmullRom => map(Keyframe::<()>::parse, Self::CatmulRom)(i),
+            SetType::Hermite => map(Keyframe::<f32>::parse, Self::Hermite)(i),
         }
     }
 }
@@ -149,7 +167,11 @@ impl Keyframe {
         let keyframes = frames
             .into_iter()
             .zip(values.into_iter())
-            .map(|(frame, value)| Self { frame, value, interpolation: () })
+            .map(|(frame, value)| Self {
+                frame,
+                value,
+                interpolation: (),
+            })
             .collect();
         Ok((i, keyframes))
     }
@@ -165,7 +187,11 @@ impl Keyframe<Hermite> {
         let keyframes = frames
             .into_iter()
             .zip(values.into_iter())
-            .map(|(frame, (value, interpolation))| Self { frame, value, interpolation })
+            .map(|(frame, (value, interpolation))| Self {
+                frame,
+                value,
+                interpolation,
+            })
             .collect();
         Ok((i, keyframes))
     }
@@ -203,7 +229,7 @@ mod tests {
     fn qualify_motion() -> Result<()> {
         let (_, header) = HeaderOffsets::parse(INPUT)?;
         let (_, mot) = RawMotion::parse(INPUT, header.unwrap())?;
-        let (_, motdb) = diva_db::mot::MotionSetDatabase::read(nom::number::Endianness::Little)(MOT_DB).unwrap();
+        let (_, motdb) = diva_db::mot::MotionSetDatabase::read(MOT_DB).unwrap();
         let (_, bonedb) = diva_db::bone::BoneDatabase::read(BONE_DB).unwrap();
         let qual = Motion::from_raw(mot, &motdb, &bonedb).unwrap();
 
