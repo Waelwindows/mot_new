@@ -9,23 +9,25 @@ mod read;
 #[cfg(feature="pyo3")]
 pub mod python_ffi;
 
+#[derive(Clone, PartialEq, PartialOrd, Debug, Default)]
 pub struct RawMotion {
     sets: Vec<FrameData>,
     bones: Vec<u16>,
     frames: u16,
 }
 
+#[derive(Clone, PartialEq, PartialOrd, Debug, Default)]
 pub struct Motion<'a> {
     frames: u16,
     anims: BTreeMap<Bone<'a>, Option<BoneAnim>>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Default, Clone)]
 pub struct Bone<'a>(diva_db::bone::Bone<'a>);
 
 type Vec3 = (FrameData, FrameData, FrameData);
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, PartialEq, PartialOrd, Debug)]
 pub enum BoneAnim {
     ///Corresponds to Type 0
     Rotation(Vec3),
@@ -43,7 +45,7 @@ pub enum BoneAnim {
     LegIk { position: Vec3, target: Vec3 },
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, PartialEq, PartialOrd, Debug)]
 pub enum FrameData {
     None,
     Pose(f32),
@@ -53,14 +55,14 @@ pub enum FrameData {
 
 type Hermite = f32;
 
-#[derive(Debug, Default, Clone, Copy, PartialEq)]
+#[derive(Copy, Clone, PartialEq, PartialOrd, Debug, Default)]
 pub struct Keyframe<I = ()> {
     pub frame: u16,
     pub value: f32,
     pub interpolation: I,
 }
 
-#[derive(Debug, Error)]
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Error)]
 pub enum MotionQualifyError {
     #[error("Found no skeleton in bone database")]
     NoSkeleton,
