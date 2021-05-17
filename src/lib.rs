@@ -5,9 +5,10 @@ use thiserror::Error;
 use std::collections::{BTreeMap, VecDeque};
 
 mod ordering;
-mod read;
-#[cfg(feature="pyo3")]
+#[cfg(feature = "pyo3")]
 pub mod python_ffi;
+mod read;
+mod write;
 
 #[derive(Clone, PartialEq, PartialOrd, Debug, Default)]
 pub struct RawMotion {
@@ -122,10 +123,13 @@ impl<'a> Motion<'a> {
                         ..Default::default()
                     };
                     anims.insert(Bone(bone), None);
-                    #[cfg(feature="tracing")]
+                    #[cfg(feature = "tracing")]
                     {
                         use tracing::*;
-                        error!("Bone `{}` not found in bone database, setting default", name);
+                        error!(
+                            "Bone `{}` not found in bone database, setting default",
+                            name
+                        );
                     }
                     continue;
                 }
@@ -154,7 +158,10 @@ impl<'a> Motion<'a> {
             anims.insert(Bone(bone), Some(anim));
         }
         dbg!(sets.len());
-        Ok(Self { anims, frames: mot.frames })
+        Ok(Self {
+            anims,
+            frames: mot.frames,
+        })
     }
 }
 
