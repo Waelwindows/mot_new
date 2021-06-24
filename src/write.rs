@@ -6,7 +6,8 @@ use std::io;
 impl RawMotion {
     fn write<W: io::Write + io::Seek>(&self, mut w: W) -> io::Result<(usize, usize)> {
         use std::io::{Seek, SeekFrom};
-        w.write_all(&(self.sets.len() as u16).to_le_bytes())?;
+        // Diva pads an extra set at the end
+        w.write_all(&(self.sets.len() as u16 + 1).to_le_bytes())?;
         w.write_all(&self.frames.to_le_bytes())?;
         let set_ty: Vec<SetType> = self.sets.iter().map(From::from).collect();
         let mut set_ty_bytes = SetType::as_bytes(&set_ty);

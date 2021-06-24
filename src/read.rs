@@ -96,7 +96,8 @@ impl RawMotion {
             at: offsets.sets,
             len: i0.len(),
         })?;
-        for (j, ty) in set_ty.iter().flatten().enumerate().take(cnt) {
+        // Diva adds an extra set as padding
+        for (j, ty) in set_ty.iter().flatten().enumerate().take(cnt-1) {
             let (i1, v) = FrameData::parse(*ty)(i)
                 .map_err(|e| RawMotionError::FrameReadError(j, i0.len() - i.len(), e))?;
             i = i1;
@@ -212,7 +213,7 @@ mod tests {
         let (_, header) = HeaderOffsets::parse(INPUT)?;
         let (i, mot) = RawMotion::parse(INPUT, header.unwrap())?;
         assert_eq!(i, &[]);
-        assert_eq!(mot.sets.len(), 583);
+        assert_eq!(mot.sets.len(), 582);
         assert_eq!(mot.bones.len(), 193);
         assert_eq!(mot.frames, 9301);
         Ok(())
