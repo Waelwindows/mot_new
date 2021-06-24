@@ -52,7 +52,7 @@ impl<'a> Motion<'a> {
                     .ok_or_else(|| UnqualifyMotionError::NotInDatabase(x.name.to_string()))
             })
             .collect::<Result<Vec<_>, _>>()?;
-        let sets = self.anims.values()
+        let mut sets: Vec<_> = self.anims.values()
             .into_iter()
             .filter_map(|x| x.as_ref())
             .cloned()
@@ -61,6 +61,10 @@ impl<'a> Motion<'a> {
             .flatten()
             .flatten()
             .collect();
+        //HACK: Padding?
+        sets.push(FrameData::None);
+        sets.push(FrameData::None);
+        sets.push(FrameData::None);
         Ok(RawMotion {
             bones,
             sets,
@@ -173,29 +177,15 @@ mod tests {
         let mot_db = diva_db::mot::MotionSetDatabase::read(MOT_DB)?.1;
         let bone_db = diva_db::bone::BoneDatabase::read(BONE_DB)?.1;
         let mot = Motion::from_raw(raw.clone(), &mot_db, &bone_db)?;
-        dbg!(raw.bones.len(), mot.anims.len());
-        use BoneAnim::*;
-        let sum = mot
-            .anims
-            .values()
-            .filter_map(Option::as_ref)
-            .map(|x| match x {
-                Rotation(_) | Position(_) => 1,
-                Unk(_, _)
-                | PositionRotation { .. }
-                | RotationIk { .. }
-                | ArmIk { .. }
-                | LegIk { .. } => 2,
-            })
-            .sum::<usize>();
-        dbg!(sum);
-        dbg!(raw.sets.len());
+
         let unq = mot.clone().to_raw(&mot_db)?;
-        dbg!(unq.bones.len());
-        let mot2 = Motion::from_raw(unq.clone(), &mot_db, &bone_db)?;
-        let mut file = std::fs::File::create("out.mot")?;
-        RawMotion::write_all(&[unq.clone()], &mut file)?;
-        assert_eq!(raw.sets.len(), unq.sets.len());
+        assert_eq!(raw.sets, unq.sets);
+
+        let mot = Motion::from_raw(unq.clone(), &mot_db, &bone_db)?;
+        let last = mot.to_raw(&mot_db)?;
+
+        assert_eq!(raw.sets, last.sets);
+
         Ok(())
     }
 }
