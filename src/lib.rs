@@ -3,6 +3,7 @@ use diva_db::mot::MotionSetDatabase;
 use thiserror::Error;
 
 use std::collections::{BTreeMap, VecDeque};
+use std::borrow::Cow;
 
 mod ordering;
 #[cfg(feature = "pyo3")]
@@ -25,7 +26,7 @@ pub struct Motion<'a> {
 }
 
 #[derive(Debug, PartialEq, Eq, Default, Clone)]
-pub struct Bone<'a>(diva_db::bone::Bone<'a>);
+pub struct Bone<'a>(Cow<'a, str>);
 
 type Vec3 = (FrameData, FrameData, FrameData);
 

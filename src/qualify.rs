@@ -31,14 +31,6 @@ impl BoneAnim {
 }
 
 impl<'a> Motion<'a> {
-    fn get_by_name(&self, name: &str) -> Option<&BoneAnim> {
-        self.anims
-            .iter()
-            .filter_map(|(b, a)| a.as_ref().map(|x| (b, x)))
-            .find(|(b, _)| b.name == name)
-            .map(|(_, a)| a)
-    }
-
     pub fn to_raw(self, mot_db: &MotionSetDatabase) -> Result<RawMotion, UnqualifyMotionError> {
         use std::array::IntoIter;
         let bones = self.anims.keys()
@@ -47,9 +39,9 @@ impl<'a> Motion<'a> {
                 mot_db
                     .bones
                     .iter()
-                    .position(|y| &x.name == y)
+                    .position(|y| &x[..] == y)
                     .map(|y| y as u16)
-                    .ok_or_else(|| UnqualifyMotionError::NotInDatabase(x.name.to_string()))
+                    .ok_or_else(|| UnqualifyMotionError::NotInDatabase(x.to_string()))
             })
             .collect::<Result<Vec<_>, _>>()?;
         let mut sets: Vec<_> = self.anims.values()
@@ -95,24 +87,12 @@ impl<'a> Motion<'a> {
                 .get(id as usize)
                 .ok_or_else(|| NotInMotDb(id))?;
             let bone = bones.iter().find(|x| x.name == *name);
-            let bone = match bone {
-                Some(b) => b.clone(),
-                None if name == "gblctr" => diva_db::bone::Bone {
-                    mode: BoneType::Position,
-                    name: "gblctr".into(),
-                    ..Default::default()
-                },
-                None if name == "kg_ya_ex" => diva_db::bone::Bone {
-                    mode: BoneType::Rotation,
-                    name: "kg_ya_ex".into(),
-                    ..Default::default()
-                },
+            let mode = match bone {
+                Some(b) => b.mode,
+                None if name == "gblctr" => BoneType::Position,
+                None if name == "kg_ya_ex" => BoneType::Rotation,
                 None => {
-                    let bone = diva_db::bone::Bone {
-                        name: name.clone(),
-                        ..Default::default()
-                    };
-                    anims.insert(Bone(bone), None);
+                    anims.insert(Bone(name.clone()), None);
                     #[cfg(feature = "tracing")]
                     {
                         use tracing::*;
@@ -124,7 +104,7 @@ impl<'a> Motion<'a> {
                     continue;
                 }
             };
-            let anim = match bone.mode {
+            let anim = match mode {
                 BoneType::Rotation => BoneAnim::Rotation(vec3()?),
                 BoneType::Type1 => BoneAnim::Unk(vec3()?, vec3()?),
                 BoneType::Position => BoneAnim::Position(vec3()?),
@@ -145,7 +125,7 @@ impl<'a> Motion<'a> {
                     position: vec3()?,
                 },
             };
-            anims.insert(Bone(bone), Some(anim));
+            anims.insert(Bone(name.clone()), Some(anim));
         }
         dbg!(sets.len());
         Ok(Self {
@@ -156,7 +136,7 @@ impl<'a> Motion<'a> {
 }
 
 impl<'a> core::ops::Deref for Bone<'a> {
-    type Target = diva_db::bone::Bone<'a>;
+    type Target = str;
 
     fn deref(&self) -> &Self::Target {
         &self.0

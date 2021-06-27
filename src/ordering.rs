@@ -257,17 +257,17 @@ static ORDERING: phf::Map<&'static str, u16> = phf_map! {
 impl PartialOrd for Bone<'_> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         ORDERING
-            .get(&self.name[..])
+            .get(&self[..])
             .unwrap_or(&255)
-            .partial_cmp(&ORDERING.get(&other.name[..]).unwrap_or(&255))
+            .partial_cmp(&ORDERING.get(&other[..]).unwrap_or(&255))
     }
 }
 
 impl Ord for Bone<'_> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         ORDERING
-            .get(&self.name[..])
+            .get(&self[..])
             .unwrap_or(&255)
-            .cmp(&ORDERING.get(&other.name[..]).unwrap_or(&255))
+            .cmp(&ORDERING.get(&other[..]).unwrap_or(&255))
     }
 }
