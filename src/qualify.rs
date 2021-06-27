@@ -17,7 +17,7 @@ pub enum UnqualifyMotionError {
 }
 
 impl BoneAnim {
-    fn to_vec<'a>(self) -> Vec<Vec3> {
+    fn to_vec(self) -> Vec<Vec3> {
         match self {
             BoneAnim::Rotation(v) => vec![v],
             BoneAnim::Unk(u, v) => vec![u, v],
@@ -44,7 +44,7 @@ impl<'a> Motion<'a> {
                     .ok_or_else(|| UnqualifyMotionError::NotInDatabase(x.to_string()))
             })
             .collect::<Result<Vec<_>, _>>()?;
-        let mut sets: Vec<_> = self.anims.values()
+        let sets: Vec<_> = self.anims.values()
             .into_iter()
             .filter_map(|x| x.as_ref())
             .cloned()
@@ -57,7 +57,7 @@ impl<'a> Motion<'a> {
         Ok(RawMotion {
             bones,
             sets,
-            frames: 0,
+            frames: self.frames,
         })
     }
 
