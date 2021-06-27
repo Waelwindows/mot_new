@@ -85,44 +85,34 @@ impl<'a> Motion<'a> {
                 .ok_or_else(|| NotInMotDb(id))?;
             let bone = bones.iter().find(|x| x.name == *name);
             let mode = match bone {
-                Some(b) => b.mode,
-                None if name == "gblctr" => BoneType::Position,
-                None if name == "kg_ya_ex" => BoneType::Rotation,
-                None => {
-                    anims.insert(Bone(name.clone()), None);
-                    #[cfg(feature = "tracing")]
-                    {
-                        use tracing::*;
-                        error!(
-                            "Bone `{}` not found in bone database, setting default",
-                            name
-                        );
-                    }
-                    continue;
-                }
+                Some(b) => Some(b.mode),
+                None if name == "gblctr" => Some(BoneType::Position),
+                None if name == "kg_ya_ex" =>  Some(BoneType::Rotation),
+                None => None,
             };
             let anim = match mode {
-                BoneType::Rotation => BoneAnim::Rotation(vec3()?),
-                BoneType::Type1 => BoneAnim::Unk(vec3()?, vec3()?),
-                BoneType::Position => BoneAnim::Position(vec3()?),
-                BoneType::Type3 => BoneAnim::PositionRotation {
+                Some(BoneType::Rotation) => Some(BoneAnim::Rotation(vec3()?)),
+                Some(BoneType::Type1) => Some(BoneAnim::Unk(vec3()?, vec3()?)),
+                Some(BoneType::Position) => Some(BoneAnim::Position(vec3()?)),
+                Some(BoneType::Type3) => Some(BoneAnim::PositionRotation {
                     position: vec3()?,
                     rotation: vec3()?,
-                },
-                BoneType::Type4 => BoneAnim::RotationIk {
+                }),
+                Some(BoneType::Type4) => Some(BoneAnim::RotationIk {
                     target: vec3()?,
                     rotation: vec3()?,
-                },
-                BoneType::Type5 => BoneAnim::ArmIk {
+                }),
+                Some(BoneType::Type5) => Some(BoneAnim::ArmIk {
                     target: vec3()?,
                     rotation: vec3()?,
-                },
-                BoneType::Type6 => BoneAnim::LegIk {
+                }),
+                Some(BoneType::Type6) => Some(BoneAnim::LegIk {
                     target: vec3()?,
                     position: vec3()?,
-                },
+                }),
+                None => None,
             };
-            anims.insert(Bone(name.clone()), Some(anim));
+            anims.insert(Bone(name.clone()), anim);
         }
         dbg!(sets.len());
         Ok(Self {
@@ -162,7 +152,6 @@ mod tests {
         let last = mot.to_raw(&mot_db)?;
 
         assert_eq!(raw.sets, last.sets);
-
         Ok(())
     }
 }
