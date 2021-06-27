@@ -54,9 +54,6 @@ impl<'a> Motion<'a> {
             .flatten()
             .collect();
         //HACK: Padding?
-        sets.push(FrameData::None);
-        sets.push(FrameData::None);
-        sets.push(FrameData::None);
         Ok(RawMotion {
             bones,
             sets,
