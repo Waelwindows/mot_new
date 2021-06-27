@@ -230,11 +230,12 @@ mod tests {
     fn qualify_motion() -> Result<()> {
         let (_, header) = HeaderOffsets::parse(INPUT)?;
         let (_, mot) = RawMotion::parse(INPUT, header.unwrap())?;
+        let len = mot.bones.len();
         let (_, motdb) = diva_db::mot::MotionSetDatabase::read(MOT_DB).unwrap();
         let (_, bonedb) = diva_db::bone::BoneDatabase::read(BONE_DB).unwrap();
         let qual = Motion::from_raw(mot, &motdb, &bonedb).unwrap();
 
-        assert_eq!(qual.anims.len(), 192);
+        assert_eq!(qual.anims.len(), len);
         Ok(())
     }
 

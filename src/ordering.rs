@@ -258,16 +258,18 @@ impl PartialOrd for Bone<'_> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         ORDERING
             .get(&self[..])
-            .unwrap_or(&255)
-            .partial_cmp(&ORDERING.get(&other[..]).unwrap_or(&255))
+            .zip(ORDERING.get(&other[..]))
+            .and_then(|(x, y)| x.partial_cmp(y))
     }
 }
 
 impl Ord for Bone<'_> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        ORDERING
-            .get(&self[..])
-            .unwrap_or(&255)
-            .cmp(&ORDERING.get(&other[..]).unwrap_or(&255))
+        match (ORDERING.get(&self[..]), ORDERING.get(&other[..])) {
+            (Some(a), Some(b)) => a.cmp(b),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => self[..].cmp(&other[..])
+        }
     }
 }
