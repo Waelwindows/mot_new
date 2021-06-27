@@ -128,7 +128,7 @@ impl<'a> From<super::Motion<'a>> for self::Motion {
         let anims = mot
             .anims
             .into_iter()
-            .map(|(b, a)| (b.name[..].to_string(), a.map(|x| x.into())))
+            .map(|(b, a)| (b[..].to_string(), a.map(|x| x.into())))
             .collect();
         Self {
             anims,
