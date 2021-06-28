@@ -1,8 +1,12 @@
 use pyo3::prelude::*;
 use pyo3::wrap_pyfunction;
 use pyo3::PyObjectProtocol;
+use pyo3::create_exception;
+use pyo3::exceptions::PyException;
+use thiserror::*;
 
 use std::collections::BTreeMap;
+use std::convert::TryFrom;
 
 #[pyfunction]
 fn read_raw_mot(path: String) -> PyResult<Vec<RawMotion>> {
@@ -38,10 +42,19 @@ fn read_mot(path: String, mot_db: String, bone_db: String) -> PyResult<Vec<Motio
     Ok(mots)
 }
 
+#[pyfunction]
+pub fn write_all_bytes(raws: Vec<RawMotion>) -> Result<Vec<u8>, std::io::Error> {
+    let raws = raws.into_iter().map(super::RawMotion::from).collect::<Vec<_>>();
+    let mut data = std::io::Cursor::new(vec![]);
+    super::RawMotion::write_all(&raws, &mut data)?;
+    Ok(data.into_inner())
+}
+
 #[pymodule]
 fn mot(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_wrapped(wrap_pyfunction!(read_raw_mot))?;
     m.add_wrapped(wrap_pyfunction!(read_mot))?;
+    m.add_wrapped(wrap_pyfunction!(write_all_bytes))?;
     m.add_class::<RawMotion>()?;
     m.add_class::<Motion>()?;
     m.add_class::<BoneAnim>()?;
@@ -123,6 +136,23 @@ impl From<super::RawMotion> for self::RawMotion {
     }
 }
 
+impl From<self::RawMotion> for super::RawMotion {
+    fn from(mot: self::RawMotion) -> Self {
+        let sets = mot
+            .sets
+            .into_iter()
+            .map(keyset2framedata)
+            .collect();
+        let bones = mot.bones;
+        let frames = mot.frames;
+        Self {
+            sets,
+            bones,
+            frames,
+        }
+    }
+}
+
 impl<'a> From<super::Motion<'a>> for self::Motion {
     fn from(mot: super::Motion) -> Self {
         let anims = mot
@@ -134,6 +164,25 @@ impl<'a> From<super::Motion<'a>> for self::Motion {
             anims,
             frames: mot.frames,
         }
+    }
+}
+
+impl<'a> TryFrom<self::Motion> for super::Motion<'a> {
+    type Error = FromPyBoneAnimError;
+
+    fn try_from(mot: self::Motion) -> Result<Self, Self::Error> {
+        use std::borrow::Cow;
+        let anims = mot
+            .anims
+            .iter()
+            .map(|(x, y)| (super::Bone(Cow::Owned(x.clone())), y))
+            .map(|(x, y)| (x, y.as_ref().cloned().map(|z| super::BoneAnim::try_from(z))))
+            .map(|(x, y)| y.transpose().map(|z| (x, z)))
+            .collect::<Result<_, _>>()?;
+        Ok(Self {
+            anims,
+            frames: mot.frames,
+        })
     }
 }
 
@@ -174,6 +223,42 @@ impl From<super::BoneAnim> for self::BoneAnim {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, Error)]
+pub enum FromPyBoneAnimError {
+    #[error("No animation was found")]
+    NoAnimation,
+    #[error("Lone target was found. Target must be accompanied by either rotation or position.")]
+    LoneTarget,
+    #[error("All animation types were found. Only 2 are supported at any time")]
+    AllAnimationTypes,
+}
+
+impl TryFrom<self::BoneAnim> for super::BoneAnim {
+    type Error = FromPyBoneAnimError;
+
+    fn try_from(anim: self::BoneAnim) -> Result<Self, Self::Error> {
+        match (anim.rotation, anim.position, anim.target) {
+            (Some(r), None, None) => Ok(Self::Rotation(r.into())),
+            (None, Some(p), None) => Ok(Self::Position(p.into())),
+            (Some(r), Some(p), None) => Ok(Self::PositionRotation {
+                position: p.into(),
+                rotation: r.into(),
+            }),
+            (Some(r), None, Some(t)) => Ok(Self::RotationIk {
+                rotation: r.into(),
+                target: t.into(),
+            }),
+            (None, Some(p), Some(t)) => Ok(Self::LegIk {
+                position: p.into(),
+                target: t.into(),
+            }),
+            (_, _, Some(_)) => Err(FromPyBoneAnimError::LoneTarget),
+            (Some(_), Some(_), Some(_)) => Err(FromPyBoneAnimError::AllAnimationTypes),
+            (None, None, None) => Err(FromPyBoneAnimError::NoAnimation),
+        }
+    }
+}
+
 impl From<super::Vec3> for self::Vec3 {
     fn from((x, y, z): super::Vec3) -> Self {
         Self {
@@ -181,6 +266,96 @@ impl From<super::Vec3> for self::Vec3 {
             y: Keyframe::from_frame_data(y),
             z: Keyframe::from_frame_data(z),
         }
+    }
+}
+
+impl From<self::Vec3> for super::Vec3 {
+    fn from(vec: self::Vec3) -> Self {
+        (
+            keyset2framedata(vec.x),
+            keyset2framedata(vec.y),
+            keyset2framedata(vec.z),
+        )
+    }
+}
+
+fn keyset2framedata(set: KeySet) -> super::FrameData {
+    use super::FrameData;
+    match &set[..] {
+        [] => FrameData::None,
+        [v] if v.frame.is_none() => FrameData::Pose(v.value),
+        [f, ..] if f.interpolation.is_some() => {
+            let v = set
+                .into_iter()
+                .map(|x| super::Keyframe::<super::Hermite> {
+                    frame: x.frame.unwrap(),
+                    value: x.value,
+                    interpolation: x.interpolation.unwrap(),
+                })
+                .collect();
+            FrameData::Hermite(v)
+        }
+        _ => {
+            let v = set
+                .into_iter()
+                .map(|x| super::Keyframe {
+                    frame: x.frame.unwrap(),
+                    value: x.value,
+                    interpolation: (),
+                })
+                .collect();
+            FrameData::CatmulRom(v)
+        }
+    }
+}
+
+#[pymethods]
+impl Motion {
+    #[cfg(feature="python")]
+    pub fn unqualify(&self, mot_db: &diva_db::mot::py_ffi::PyMotionSetDatabase) -> Result<RawMotion, crate::qualify::UnqualifyMotionError> {
+        use std::array::IntoIter;
+        let bones = self.anims.keys()
+            .into_iter()
+            .map(|x| {
+                mot_db
+                    .bones
+                    .iter()
+                    .position(|y| &x[..] == y)
+                    .map(|y| y as u16)
+                    .ok_or_else(|| crate::qualify::UnqualifyMotionError::NotInDatabase(x.to_string()))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let sets: Vec<_> = self.anims.values()
+            .into_iter()
+            .filter_map(|x| x.as_ref())
+            .cloned()
+            .map(BoneAnim::to_vec)
+            .map(|x| x.into_iter().map(|v| IntoIter::new([v.x, v.y, v.z])))
+            .flatten()
+            .flatten()
+            .collect();
+        //HACK: Padding?
+        Ok(RawMotion {
+            bones,
+            sets,
+            frames: self.frames,
+        })
+    }
+}
+
+impl BoneAnim {
+    fn to_vec(self) -> Vec<Vec3> {
+        let mut vec = vec![];
+        if let Some(v) = self.target {
+            vec.push(v);
+        }
+        if let Some(v) = self.position {
+            vec.push(v);
+        }
+        if let Some(v) = self.rotation {
+            vec.push(v);
+        }
+        vec
     }
 }
 
@@ -216,6 +391,14 @@ impl From<super::Keyframe<super::Hermite>> for self::Keyframe {
             value: key.value,
             interpolation: Some(key.interpolation),
         }
+    }
+}
+
+create_exception!(mot, UnqualifyError, PyException);
+
+impl std::convert::From<crate::qualify::UnqualifyMotionError> for PyErr {
+    fn from(err: crate::qualify::UnqualifyMotionError) -> PyErr {
+        UnqualifyError::new_err(err.to_string())
     }
 }
 
