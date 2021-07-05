@@ -16,7 +16,7 @@ fn read_raw_mot(path: String) -> PyResult<Vec<RawMotion>> {
     use std::io::Read;
 
     let input = std::fs::read(path)?;
-    let raw = RawMotion::read(&input).unwrap();
+    let raw = RawMotion::read(&input)?;
     Ok(raw.into_iter().map(Into::into).collect())
 }
 
@@ -26,7 +26,7 @@ fn read_mot(path: String, mot_db: String, bone_db: String) -> PyResult<Vec<Motio
     use std::io::Read;
 
     let input = std::fs::read(path)?;
-    let raws = RawMotion::read(&input).unwrap();
+    let raws = RawMotion::read(&input)?;
 
     let input = std::fs::read(mot_db)?;
     let (_, mot_db) = diva_db::mot::MotionSetDatabase::read(&input).unwrap();
@@ -36,8 +36,7 @@ fn read_mot(path: String, mot_db: String, bone_db: String) -> PyResult<Vec<Motio
     let mots = raws
         .into_iter()
         .map(|x| super::Motion::from_raw(x, &mot_db, &bone_db).map(From::from))
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap();
+        .collect::<Result<Vec<_>, _>>()?;
 
     Ok(mots)
 }
@@ -395,10 +394,24 @@ impl From<super::Keyframe<super::Hermite>> for self::Keyframe {
 }
 
 create_exception!(mot, UnqualifyError, PyException);
+create_exception!(mot, QualifyError, PyException);
+create_exception!(mot, RawMotionError, PyException);
 
 impl std::convert::From<crate::qualify::UnqualifyMotionError> for PyErr {
     fn from(err: crate::qualify::UnqualifyMotionError) -> PyErr {
         UnqualifyError::new_err(err.to_string())
+    }
+}
+
+impl std::convert::From<crate::qualify::MotionQualifyError> for PyErr {
+    fn from(err: crate::qualify::MotionQualifyError) -> PyErr {
+        QualifyError::new_err(err.to_string())
+    }
+}
+
+impl std::convert::From<crate::read::RawMotionError> for PyErr {
+    fn from(err: crate::read::RawMotionError) -> PyErr {
+        RawMotionError::new_err(err.to_string())
     }
 }
 
