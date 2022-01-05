@@ -19,7 +19,7 @@ thiserror = "1.0.24"
 diva_db = { path = "../diva_db" }
 phf = { version="0.8.0", features=["macros"] }
 tracing = { version = "0.1.25", optional = true }
-pyo3 = { version = "0.13.2", optional = true }
+pyo3 = { version = "0.13.2", optional = true, features=["extension-module","abi3-py36"] }
 nom = "5.1.2"
 
 [features]
